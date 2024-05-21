@@ -13,7 +13,12 @@ SCREENSHOT_SENDER = "robot@friend.dk"
 
 # Constant/Credential names
 ERROR_EMAIL = "Error Email"
+NOVA_API = "Nova API"
+GRAPH_API = "Graph API"
 
+# Other
+MAIL_SOURCE_FOLDER = "Indbakke/Masseoprettelse KMD Nova"
+STATUS_SENDER = "itk-rpa@mkb.aarhus.dk"
 
 # Queue specific configs
 # ----------------------
