@@ -24,7 +24,7 @@ class CaseMail:
         self.case_title = case_title
         self.kle = kle
         self.proceeding_facet = action_aspect
-        self.sensitivity = sensitivity
+        self.sensitivity = _get_sensitivity_from_email(sensitivity)
         self.note_title = note_title
         self.note_text = note_text
 
@@ -49,7 +49,7 @@ def process(orchestrator_connection: OrchestratorConnection) -> None:
         for ident in list_of_ids:
             cases = _get_cases_from_id(nova_access, ident, case_mail.case_title)
             name = _get_name_from_cpr(cases, ident, nova_access)
-            case = _find_or_create_matching_case(cases, case_mail.kle, ident, name)
+            case = _find_or_create_matching_case(cases, case_mail.kle, ident, name, nova_access)
             print("Writing note: " + case_mail.note_title)
             nova_notes.add_text_note(case.uuid, case_mail.note_title, case_mail.note_text, True, nova_access)
         # Remove email
@@ -135,11 +135,32 @@ def find_or_create_case(cpr: str, nova_access: NovaAccess, caseworker: Caseworke
     return case
 
 
+def _get_sensitivity_from_email(email_string: str) -> str:
+    '''Translates the string from OS2 forms to the expected KMD Nova format. This is used only when creating a CaseMail
+
+    Args:
+        email_string: A string, matching the format in OS2 Forms and the emails send to the robot
+
+    Returns:
+        A string, matching the format expected by KMD Nova in the sensitivity field
+    '''
+    translation = {
+        "Fortrolige oplysninger": "Fortrolige",
+        "Ikke fortrolige oplysninger": "IkkeFortrolige",
+        "Særligt følsomme oplysninger": "SærligFølsomme",
+        "Følsomme oplysninger": "Følsomme"
+    }
+    return translation[email_string]
+
+
 def _get_name_from_cpr(cases: list[NovaCase], cpr: str, nova_access: NovaAccess) -> str:
+    '''Find name from a matching case or lookup by address
+    '''
     for case in cases:
         for case_party in case.case_parties:
             if case_party.identification == cpr and case_party.name:
                 return case_party.name
+    # This function does not return the expected object, nothing is returned. Maybe it's because of the test cpr?
     return nova_cpr.get_address_by_cpr(cpr, nova_access)['name']
 
 
@@ -153,7 +174,7 @@ def _read_mail_from_file(mail: str) -> str:
         return file.read()
 
 
-def _create_case(id: str, name: str, case_mail: CaseMail) -> NovaCase:
+def _create_case(ident: str, name: str, case_mail: CaseMail, nova_access: NovaAccess) -> NovaCase:
     """Create a Nova case based on email data.
 
     Returns:
@@ -176,12 +197,12 @@ def _create_case(id: str, name: str, case_mail: CaseMail) -> NovaCase:
     case_party = CaseParty(
         role="Primær",
         identification_type=id_type,
-        identification=id,
+        identification=ident,
         name=name,
         uuid=None
     )
 
-    return NovaCase(
+    case = NovaCase(
         uuid=str(uuid.uuid4()),
         title=case_mail.case_title,
         case_date=datetime.now(),
@@ -194,6 +215,8 @@ def _create_case(id: str, name: str, case_mail: CaseMail) -> NovaCase:
         responsible_department=department,
         security_unit=department
     )
+    nova_cases.add_case(case, nova_access)
+    return case
 
 
 def _get_ids_from_mail(email: Email, graph_access: GraphAccess) -> list[str]:
@@ -212,11 +235,11 @@ def _get_cases_from_id(nova_access: NovaAccess, id: str, case_title: str) -> lis
         return nova_cases.get_cvr_cases(nova_access, id, case_title = case_title)
 
 
-def _find_or_create_matching_case(cases: list[NovaCase], case_mail: CaseMail, ident: str, name: str) -> NovaCase:
+def _find_or_create_matching_case(cases: list[NovaCase], case_mail: CaseMail, ident: str, name: str, nova_access: NovaAccess) -> NovaCase:
     for case in cases:
         if case.kle == case_mail.kle:
             return case
-    return _create_case(ident, name, case_mail)
+    return _create_case(ident, name, case_mail, nova_access)
 
 
 def _is_cpr(string_to_check: str) -> bool:
