@@ -24,11 +24,11 @@ def process(orchestrator_connection: OrchestratorConnection) -> None:
     """Do the primary process of the robot."""
     orchestrator_connection.log_trace("Running process.")
 
-    nova_creds = orchestrator_connection.get_credential(config.NOVA_API)
-    nova_access = NovaAccess(nova_creds.username, nova_creds.password)
+    nova_credentials = orchestrator_connection.get_credential(config.NOVA_API)
+    nova_access = NovaAccess(nova_credentials.username, nova_credentials.password)
 
-    graph_creds = orchestrator_connection.get_credential(config.GRAPH_API)
-    graph_access = graph_authentication.authorize_by_username_password(graph_creds.username, **json.loads(graph_creds.password))
+    graph_credentials = orchestrator_connection.get_credential(config.GRAPH_API)
+    graph_access = graph_authentication.authorize_by_username_password(graph_credentials.username, **json.loads(graph_credentials.password))
 
     # Check mail for things to process
     emails = get_emails(graph_access)
@@ -38,16 +38,12 @@ def process(orchestrator_connection: OrchestratorConnection) -> None:
         case_mail = _parse_mail_text(email.body)
         list_of_ids = _get_ids_from_mail(email, graph_access)
         for ident in list_of_ids:
+            ident = ident.replace("-", "")
             cases = _get_cases_from_id(nova_access, ident, case_mail.case_title)
             name = _get_name_from_cpr(cases, ident, nova_access)
-            case = _find_or_create_matching_case(cases, case_mail.kle, ident, name, nova_access)
-            print("Writing note: " + case_mail.note_title)
+            case = _find_or_create_matching_case(cases, case_mail, ident, name, nova_access)
             nova_notes.add_text_note(case.uuid, case_mail.note_title, case_mail.note_text, True, nova_access)
         # Remove email
-
-    # name = nova_cpr.get_address_by_cpr(cpr, nova_access)['name']
-
-    # nova_cases.add_case(test_case(), nova_access)
 
 
 def get_emails(graph_access: GraphAccess) -> list[Email]:
@@ -69,14 +65,35 @@ def get_emails(graph_access: GraphAccess) -> list[Email]:
 
 
 def _parse_mail_text(mail_text: str) -> CaseMail:
+    ''' From an email sent by the OS2 Forms form "Masseoprettelse i KMD Nova",
+    create a new CaseMail object
+    '''
     return CaseMail(
         _get_line_after("Sagsoverskrift", mail_text),
         _get_line_after("KLE-nummer", mail_text),
         _get_line_after("Handlingsfacet", mail_text),
-        _get_line_after("Følsomhed", mail_text),
+        _get_sensitivity_from_email(_get_line_after("Følsomhed", mail_text)),
         _get_line_after("Notat overskrift", mail_text),
         _get_line_after("Notat tekst", mail_text)
     )
+
+
+def _get_sensitivity_from_email(email_string: str) -> str:
+    '''Translates the string from OS2 forms to the expected KMD Nova format. This is used only when creating a CaseMail
+
+    Args:
+        email_string: A string, matching the format in OS2 Forms and the emails sent to the robot
+
+    Returns:
+        A string, matching the format expected by KMD Nova in the sensitivity field
+    '''
+    translation = {
+        "Fortrolige oplysninger": "Fortrolige",
+        "Ikke fortrolige oplysninger": "IkkeFortrolige",
+        "Særligt følsomme oplysninger": "SærligFølsomme",
+        "Følsomme oplysninger": "Følsomme"
+    }
+    return translation[email_string]
 
 
 def _get_line_after(line: str, text: str) -> str:
@@ -102,16 +119,6 @@ def _get_name_from_cpr(cases: list[NovaCase], cpr: str, nova_access: NovaAccess)
                 return case_party.name
     # If nothing was found, do a lookup in the registry:
     return nova_cpr.get_address_by_cpr(cpr, nova_access)['name']
-
-
-def _write_mail_to_file(email: Email):
-    with open("test/email" + str(uuid.uuid1())[:8] + ".txt", "w") as file:
-        file.write(email.body)
-
-
-def _read_mail_from_file(mail: str) -> str:
-    with open("test/" + mail, "r") as file:
-        return file.read()
 
 
 def _create_case(ident: str, name: str, case_mail: CaseMail, nova_access: NovaAccess) -> NovaCase:
@@ -182,8 +189,16 @@ def _get_cases_from_id(nova_access: NovaAccess, id: str, case_title: str) -> lis
 
 
 def _find_or_create_matching_case(cases: list[NovaCase], case_mail: CaseMail, ident: str, name: str, nova_access: NovaAccess) -> NovaCase:
+    ''' Lookup case match in list, based on KLE-number and case title.
+
+    Args:
+        cases: A list of cases to check
+        case_mail: A CaseMail containing the data to check for
+        ident, name: The identification and name to use if we need to create a new case
+        nova_access: An access token to access the KMD Nova API
+    '''
     for case in cases:
-        if case.kle == case_mail.kle:
+        if case.kle_number == case_mail.kle and case.title == case_mail.case_title:
             return case
     return _create_case(ident, name, case_mail, nova_access)
 
