@@ -24,7 +24,7 @@ STATUS_SENDER = "itk-rpa@mkb.aarhus.dk"
 # ----------------------
 
 # The name of the job queue (if any)
-QUEUE_NAME = None
+QUEUE_NAME = "Masseoprettelse i KMD Nova"
 
 # The limit on how many queue elements to process
 MAX_TASK_COUNT = 100

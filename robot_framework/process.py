@@ -7,6 +7,7 @@ import uuid
 import re
 
 from OpenOrchestrator.orchestrator_connection.connection import OrchestratorConnection
+from OpenOrchestrator.database.queues import QueueStatus
 from itk_dev_shared_components.graph import authentication as graph_authentication
 from itk_dev_shared_components.graph.authentication import GraphAccess
 from itk_dev_shared_components.graph import mail as graph_mail
@@ -38,12 +39,14 @@ def process(orchestrator_connection: OrchestratorConnection) -> None:
         case_mail = _parse_mail_text(email.body)
         list_of_ids = _get_ids_from_mail(email, graph_access)
         for ident in list_of_ids:
+            queue_element = orchestrator_connection.create_queue_element(config.QUEUE_NAME, reference=f"{ident}", data=f"{case_mail.case_title, case_mail.note_text}", created_by="Robot")
             ident = ident.replace("-", "")
             cases = _get_cases_from_id(nova_access, ident, case_mail.case_title)
             name = _get_name_from_cpr(cases, ident, nova_access)
             case = _find_or_create_matching_case(cases, case_mail, ident, name, nova_access)
             nova_notes.add_text_note(case.uuid, case_mail.note_title, case_mail.note_text, True, nova_access)
-        # Remove email
+            orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
+        graph_mail.delete_email(email, graph_access, permanent = True)
 
 
 def get_emails(graph_access: GraphAccess) -> list[Email]:
