@@ -16,17 +16,8 @@ from itk_dev_shared_components.kmd_nova.authentication import NovaAccess
 from itk_dev_shared_components.kmd_nova.nova_objects import NovaCase, CaseParty, Caseworker, Department
 from itk_dev_shared_components.kmd_nova import cpr as nova_cpr
 
+from robot_framework.case_mail import CaseMail
 from robot_framework import config
-
-
-class CaseMail:
-    def __init__(self, case_title, kle, action_aspect, sensitivity, note_title, note_text):
-        self.case_title = case_title
-        self.kle = kle
-        self.proceeding_facet = action_aspect
-        self.sensitivity = _get_sensitivity_from_email(sensitivity)
-        self.note_title = note_title
-        self.note_text = note_text
 
 
 def process(orchestrator_connection: OrchestratorConnection) -> None:
@@ -77,90 +68,39 @@ def get_emails(graph_access: GraphAccess) -> list[Email]:
     return mails
 
 
-def find_or_create_case(cpr: str, nova_access: NovaAccess, caseworker: Caseworker, department: Department) -> NovaCase:
-    """Find a case with the correct title and kle number on the given cpr.
-    If no case exists a new one is created instead.
-
-    Args:
-        cpr: The cpr of the person to get the case from.
-        nova_access: The nova access object used to authenticate.
-
-    Returns:
-        The relevant nova case.
-    """
-    cases = nova_cases.get_cases(nova_access, cpr=cpr)
-
-    # If a case already exists reuse it
-    for case in cases:
-        if case.title == "Sygesikring i almindelighed" and case.active_code == 'Active' and case.kle_number == '29.03.00':
-            return case
-
-    # Find the name of the person in one of the cases
-    name = None
-    for case in cases:
-        for case_party in case.case_parties:
-            if case_party.identification == cpr and case_party.name:
-                name = case_party.name
-                break
-        if name:
-            break
-
-    # If the name wasn't found in a case look it up in cpr
-    if not name:
-        name = nova_cpr.get_address_by_cpr(cpr, nova_access)['name']
-
-    case_party = CaseParty(
-        role="Primær",
-        identification_type="CprNummer",
-        identification=cpr,
-        name=name,
-        uuid=None
+def _parse_mail_text(mail_text: str) -> CaseMail:
+    return CaseMail(
+        _get_line_after("Sagsoverskrift", mail_text),
+        _get_line_after("KLE-nummer", mail_text),
+        _get_line_after("Handlingsfacet", mail_text),
+        _get_line_after("Følsomhed", mail_text),
+        _get_line_after("Notat overskrift", mail_text),
+        _get_line_after("Notat tekst", mail_text)
     )
 
-    # Create a new case
-    case = NovaCase(
-        uuid=str(uuid.uuid4()),
-        title="Sygesikring i almindelighed",
-        case_date=datetime.now(),
-        progress_state='Opstaaet',
-        case_parties=[case_party],
-        kle_number="29.03.00",
-        proceeding_facet="G01",
-        sensitivity="Følsomme",
-        caseworker=caseworker,
-        responsible_department=department,
-        security_unit=department
-    )
-    nova_cases.add_case(case, nova_access)
-    return case
 
-
-def _get_sensitivity_from_email(email_string: str) -> str:
-    '''Translates the string from OS2 forms to the expected KMD Nova format. This is used only when creating a CaseMail
-
-    Args:
-        email_string: A string, matching the format in OS2 Forms and the emails send to the robot
-
-    Returns:
-        A string, matching the format expected by KMD Nova in the sensitivity field
-    '''
-    translation = {
-        "Fortrolige oplysninger": "Fortrolige",
-        "Ikke fortrolige oplysninger": "IkkeFortrolige",
-        "Særligt følsomme oplysninger": "SærligFølsomme",
-        "Følsomme oplysninger": "Følsomme"
-    }
-    return translation[email_string]
+def _get_line_after(line: str, text: str) -> str:
+    match = re.search("<b>" + line + r"<\/b><br>(.+?)<br>", text)
+    return match.group(1)
 
 
 def _get_name_from_cpr(cases: list[NovaCase], cpr: str, nova_access: NovaAccess) -> str:
     '''Find name from a matching case or lookup by address
+
+    Args:
+        cases: A list of NovaCases to check for existing name
+        cpr: ÍD of the person we are looking for
+        nova_access: A token to access the KMD Nova API
+
+    Returns:
+        A string of a name
     '''
+    # Check provided cases for an existing match with a name:
     for case in cases:
         for case_party in case.case_parties:
             if case_party.identification == cpr and case_party.name:
                 return case_party.name
-    # This function does not return the expected object, nothing is returned. Maybe it's because of the test cpr?
+    # If nothing was found, do a lookup in the registry:
     return nova_cpr.get_address_by_cpr(cpr, nova_access)['name']
 
 
@@ -176,6 +116,12 @@ def _read_mail_from_file(mail: str) -> str:
 
 def _create_case(ident: str, name: str, case_mail: CaseMail, nova_access: NovaAccess) -> NovaCase:
     """Create a Nova case based on email data.
+
+    Args:
+        ident: The CVR or CPR we are looking for
+        name: The name of the person we are looking for
+        case_mail: A CaseMail object containing the data from the case
+        nova_access: An access token for accessing the KMD Nova API
 
     Returns:
         New NovaCase with data defined
@@ -257,22 +203,6 @@ def _is_cvr(string_to_check: str) -> bool:
         Is it 8 symbols long?
     '''
     return string_to_check.__len__() == 8
-
-
-def _parse_mail_text(mail_text: str) -> CaseMail:
-    return CaseMail(
-        _get_line_after("Sagsoverskrift", mail_text),
-        _get_line_after("KLE-nummer", mail_text),
-        _get_line_after("Handlingsfacet", mail_text),
-        _get_line_after("Følsomhed", mail_text),
-        _get_line_after("Notat overskrift", mail_text),
-        _get_line_after("Notat tekst", mail_text)
-    )
-
-
-def _get_line_after(line: str, text: str) -> str:
-    match = re.search("<b>" + line + r"<\/b><br>(.+?)<br>", text)
-    return match.group(1)
 
 
 if __name__ == '__main__':
