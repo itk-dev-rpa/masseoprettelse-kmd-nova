@@ -23,19 +23,7 @@ def test(orchestrator_connection: OrchestratorConnection) -> None:
     ident = "2307851647"
     cases = process._get_cases_from_id(nova_access, ident, case_mail.case_title)
     name = process._get_name_from_cpr(cases, ident, nova_access)
-    return
-    with open("test/testdata.csv", "r") as _email_attachment:
-        list_of_ids = _email_attachment.read().split()
-        for ident in list_of_ids:
-            cases = process._get_cases_from_id(nova_access, ident, case_mail.case_title)
-            name = process._get_name_from_cpr(cases, ident, nova_access)
-            # case = process._find_or_create_matching_case(cases, case_mail.kle, ident, name, nova_access)
-            print("Writing note: " + case_mail.note_title + " to name: " + name)
-        # Remove email
-
-    # name = nova_cpr.get_address_by_cpr(cpr, nova_access)['name']
-
-    # nova_cases.add_case(test_case(), nova_access)
+    print(name)
 
 
 def _write_mail_to_file(email: str):
