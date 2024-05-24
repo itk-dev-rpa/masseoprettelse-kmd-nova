@@ -75,7 +75,7 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
             mail_dict["Notat tekst"],
             True,
             nova_access)
- 
+
         # Set status Done for this note and look for the next queue element
         orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
 
