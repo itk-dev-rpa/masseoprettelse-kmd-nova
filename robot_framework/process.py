@@ -4,7 +4,6 @@ from datetime import datetime
 import json
 import os
 import uuid
-import re
 
 from OpenOrchestrator.orchestrator_connection.connection import OrchestratorConnection
 from OpenOrchestrator.database.queues import QueueStatus
@@ -17,7 +16,7 @@ from itk_dev_shared_components.kmd_nova.authentication import NovaAccess
 from itk_dev_shared_components.kmd_nova.nova_objects import NovaCase, CaseParty, Caseworker, Department
 from itk_dev_shared_components.kmd_nova import cpr as nova_cpr
 
-from robot_framework.case_mail import CaseMail
+from robot_framework.soup_mail import html_to_dict
 from robot_framework import config
 
 
@@ -25,33 +24,60 @@ def process(orchestrator_connection: OrchestratorConnection) -> None:
     """Do the primary process of the robot."""
     orchestrator_connection.log_trace("Running process.")
 
-    # Get access tokens for Nova and email
-    nova_credentials = orchestrator_connection.get_credential(config.NOVA_API)
-    nova_access = NovaAccess(nova_credentials.username, nova_credentials.password)
     graph_credentials = orchestrator_connection.get_credential(config.GRAPH_API)
     graph_access = graph_authentication.authorize_by_username_password(graph_credentials.username, **json.loads(graph_credentials.password))
+    create_queue_from_emails(orchestrator_connection, graph_access)
 
+    nova_credentials = orchestrator_connection.get_credential(config.NOVA_API)
+    nova_access = NovaAccess(nova_credentials.username, nova_credentials.password)
+    create_notes_from_queue(orchestrator_connection, nova_access)
+
+
+def create_queue_from_emails(orchestrator_connection: OrchestratorConnection, graph_access: GraphAccess):
+    ''' Create a queue by reading emails and delete the emails after.
+
+    Args:
+        orchestrator_connection: A way to access the orchestrator to create the queue elements
+        graph_access: A token to access emails
+    '''
     # Check mailbox for emails to process
     emails = get_emails(graph_access)
 
     # Parse each mail and add data to KMD Nova
     for email in emails:
         # Get data from email
-        case_mail = _parse_mail_text(email.body)
+        mail_dict = _parse_mail_text(email.body)
         list_of_ids = _get_ids_from_mail(email, graph_access)
-        for ident in list_of_ids:
-            queue_element = orchestrator_connection.create_queue_element(config.QUEUE_NAME, reference=f"{ident}", data=f"{case_mail.case_title, case_mail.note_text}", created_by="Robot")
-            # Clean up data
-            ident = ident.replace("-", "")
-            # Find a case to add note to
-            cases = nova_cases.get_cases(nova_access, ident, case_title = case_mail.case_title)
-            name = _get_name_from_cpr(cases, ident, nova_access)
-            case = _find_or_create_matching_case(cases, case_mail, ident, name, nova_access)
-            nova_notes.add_text_note(case.uuid, case_mail.note_title, case_mail.note_text, True, nova_access)
-            # Set status Done for this note
-            orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
-        # Delete email
-        graph_mail.delete_email(email, graph_access, permanent = True)
+        orchestrator_connection.bulk_create_queue_elements(
+            config.QUEUE_NAME,
+            references = list_of_ids,
+            data=[json.dumps(mail_dict, ensure_ascii=False)] * len(list_of_ids),
+            created_by="Robot")
+        # graph_mail.delete_email(email, graph_access, permanent = True)
+
+
+def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nova_access: NovaAccess):
+    ''' Load queue elements and write notes to KMD Nova
+
+    Args:
+        orchestrator_connection: A way to read the queue elements
+        nova_access: A token to write the notes
+    '''
+    while queue_element := orchestrator_connection.get_next_queue_element(config.QUEUE_NAME):
+        # Find a case to add note to
+        mail_dict = json.loads(queue_element.data)
+        cases = nova_cases.get_cases(nova_access, cpr = queue_element.reference, case_title = mail_dict["Sagsoverskrift"])
+        name = _get_name_from_cpr(cases, cpr = queue_element.reference, nova_access = nova_access)
+        case = _find_or_create_matching_case(cases, mail_dict, queue_element.reference, name, nova_access)
+        nova_notes.add_text_note(
+            case.uuid,
+            mail_dict["Notat overskrift"],
+            mail_dict["Notat tekst"],
+            True,
+            nova_access)
+ 
+        # Set status Done for this note and look for the next queue element
+        orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
 
 
 def get_emails(graph_access: GraphAccess) -> list[Email]:
@@ -72,38 +98,19 @@ def get_emails(graph_access: GraphAccess) -> list[Email]:
     return mails
 
 
-def _parse_mail_text(mail_text: str) -> CaseMail:
+def _parse_mail_text(mail_text: str) -> dict:
     ''' From an email sent by the OS2 Forms form "Masseoprettelse i KMD Nova",
-    create a new CaseMail object.
+    create a new dictionary.
 
     Args:
         mail_text: Text from OS2 Forms that can be read by the robot.
 
     "Returns:
-        A CaseMail object, for easier access to variables.
+        A dictionary object, for easier access to variables.
     '''
-    return CaseMail(
-        _get_line_after("Sagsoverskrift", mail_text),
-        _get_line_after("KLE-nummer", mail_text),
-        _get_line_after("Handlingsfacet", mail_text),
-        _get_sensitivity_from_email(_get_line_after("Følsomhed", mail_text)),
-        _get_line_after("Notat overskrift", mail_text),
-        _get_line_after("Notat tekst", mail_text)
-    )
-
-
-def _get_line_after(line: str, text: str) -> str:
-    ''' Get the line after the indicated string, based on the format on OS2 mails, using regex.
-
-    Args:
-        line: The string to search for.
-        text: The text to search in.
-
-    Returns:
-        The string between linebreaks, after the string searched for.
-    '''
-    match = re.search("<b>" + line + r"<\/b><br>(.+?)<br>", text)
-    return match.group(1)
+    dictionary = html_to_dict(mail_text)
+    dictionary["Følsomhed"] = _get_sensitivity_from_email(dictionary["Følsomhed"])
+    return dictionary
 
 
 def _get_sensitivity_from_email(email_string: str) -> str:
@@ -144,13 +151,13 @@ def _get_name_from_cpr(cases: list[NovaCase], cpr: str, nova_access: NovaAccess)
     return nova_cpr.get_address_by_cpr(cpr, nova_access)['name']
 
 
-def _create_case(ident: str, name: str, case_mail: CaseMail, nova_access: NovaAccess) -> NovaCase:
+def _create_case(ident: str, name: str, mail_dict: dict, nova_access: NovaAccess) -> NovaCase:
     """Create a Nova case based on email data.
 
     Args:
         ident: The CVR or CPR we are looking for
         name: The name of the person we are looking for
-        case_mail: A CaseMail object containing the data from the case
+        case_mail: A dictionary object containing the data from the case
         nova_access: An access token for accessing the KMD Nova API
 
     Returns:
@@ -180,13 +187,13 @@ def _create_case(ident: str, name: str, case_mail: CaseMail, nova_access: NovaAc
 
     case = NovaCase(
         uuid=str(uuid.uuid4()),
-        title=case_mail.case_title,
+        title=mail_dict["Sagsoverskrift"],
         case_date=datetime.now(),
         progress_state='Opstaaet',
         case_parties=[case_party],
-        kle_number=case_mail.kle,
-        proceeding_facet=case_mail.proceeding_facet,
-        sensitivity=case_mail.sensitivity,
+        kle_number=mail_dict["KLE-nummer"],
+        proceeding_facet=mail_dict["Handlingsfacet"],
+        sensitivity=mail_dict["Følsomhed"],
         caseworker=caseworker,
         responsible_department=department,
         security_unit=department
@@ -205,15 +212,17 @@ def _get_ids_from_mail(email: Email, graph_access: GraphAccess) -> list[str]:
     Returns:
         A list of each line found in the attachments.
     '''
-    id_list = list[0]
+    id_list = []
     attachments = graph_mail.list_email_attachments(email, graph_access)
     for attachment in attachments:
         email_attachment = graph_mail.get_attachment_data(attachment, graph_access)
         id_list = id_list + email_attachment.read().decode().split()
+
+    id_list = [s.replace("-", "") for s in id_list]
     return id_list
 
 
-def _find_or_create_matching_case(cases: list[NovaCase], case_mail: CaseMail, ident: str, name: str, nova_access: NovaAccess) -> NovaCase:
+def _find_or_create_matching_case(cases: list[NovaCase], mail_dict: dict, ident: str, name: str, nova_access: NovaAccess) -> NovaCase:
     ''' Lookup case match in list, based on KLE-number and case title.
 
     Args:
@@ -226,9 +235,9 @@ def _find_or_create_matching_case(cases: list[NovaCase], case_mail: CaseMail, id
         A NovaCase which matches the arguments provided.
     '''
     for case in cases:
-        if case.kle_number == case_mail.kle and case.title == case_mail.case_title:
+        if case.kle_number == mail_dict["KLE-nummer"] and case.title == mail_dict["Sagsoverskrift"]:
             return case
-    return _create_case(ident, name, case_mail, nova_access)
+    return _create_case(ident, name, mail_dict, nova_access)
 
 
 if __name__ == '__main__':
