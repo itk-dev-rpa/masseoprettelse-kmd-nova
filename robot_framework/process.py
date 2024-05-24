@@ -53,7 +53,7 @@ def create_queue_from_emails(orchestrator_connection: OrchestratorConnection, gr
             references = list_of_ids,
             data=[json.dumps(mail_dict, ensure_ascii=False)] * len(list_of_ids),
             created_by="Robot")
-        # graph_mail.delete_email(email, graph_access, permanent = True)
+        graph_mail.delete_email(email, graph_access, permanent = True)
 
 
 def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nova_access: NovaAccess):
