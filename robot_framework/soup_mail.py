@@ -2,8 +2,12 @@
 from bs4 import BeautifulSoup
 
 
-def html_to_dict(html_content):
-    ''' Convert OS2 Emails to dictionaries '''
+def html_to_dict(html_content) -> dict:
+    ''' Convert OS2 Emails to dictionaries.
+
+    Args:
+        html_content: OS2 email content containing bold headlines followed by data
+    '''
     # Parse the HTML content
     soup = BeautifulSoup(html_content, 'html.parser')
     bold_tags = soup.find_all('b')
@@ -15,14 +19,14 @@ def html_to_dict(html_content):
 
         # Find the next sibling that is not a tag (usually the text part)
         next_sibling = bold_tag.next_sibling
-        value = ""
+        values = []
 
-        while next_sibling and not isinstance(next_sibling, str):
+        while next_sibling and next_sibling not in bold_tags:
+            if isinstance(next_sibling, str):
+                values.append(next_sibling.strip())
+
             next_sibling = next_sibling.next_sibling
 
-        if next_sibling:
-            value = next_sibling.strip()
-
-        email_dict[headline] = value
+        email_dict[headline] = "\n".join(values)
 
     return email_dict

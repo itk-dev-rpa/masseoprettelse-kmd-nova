@@ -11,6 +11,14 @@ SMTP_SERVER = "smtp.aarhuskommune.local"
 SMTP_PORT = 25
 SCREENSHOT_SENDER = "robot@friend.dk"
 
+# Email texts
+SUBJECT_BASE = "Robotstatus for Masseoprettelse i KMD Nova: "
+SUBJECT_SUCCESS = "OK"
+SUBJECT_ERROR = "Fejl"
+BODY_BASE = "Robotten 'Masseoprettelse i KMD Nova' "
+BODY_SUCCESS = "er startet."
+BODY_ERROR = "er blevet blokeret da du ikke har tilladelse til at køre den. Kontakt venligst RPA-teamet."
+
 # Constant/Credential names
 ERROR_EMAIL = "Error Email"
 NOVA_API = "Nova API"
