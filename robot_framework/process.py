@@ -17,6 +17,7 @@ from itk_dev_shared_components.kmd_nova.authentication import NovaAccess
 from itk_dev_shared_components.kmd_nova.nova_objects import NovaCase, CaseParty, Caseworker, Department
 from itk_dev_shared_components.kmd_nova import cpr as nova_cpr
 from itk_dev_shared_components.smtp import smtp_util
+from requests.exceptions import HTTPError
 
 from robot_framework.soup_mail import html_to_dict
 from robot_framework import config
@@ -44,6 +45,7 @@ def _create_queue_from_emails(orchestrator_connection: OrchestratorConnection, g
     '''
     # Check mailbox for emails to process
     emails = _get_emails(graph_access)
+    emails.reverse()
 
     # Parse each mail and add data to KMD Nova
     for email in emails:
@@ -51,7 +53,8 @@ def _create_queue_from_emails(orchestrator_connection: OrchestratorConnection, g
         data_dict = _parse_mail_text(email.body)
         user_az = _get_az_from_email(data_dict["Bruger"])
         is_user_recognized = _check_az(orchestrator_connection, user_az)
-        _send_status_email(_get_recipient_from_email(data_dict["Bruger"]), is_user_recognized)
+        _send_status_email(_get_recipient_from_email(data_dict["Bruger"]), is_user_recognized, data_dict["Sagsoverskrift"])
+        # If user is not allowed to send this data, stop the process.
         if not is_user_recognized:
             break
         list_of_ids = _get_ids_from_mail(email, graph_access)
@@ -82,22 +85,20 @@ def _check_az(orchestrator_connection: OrchestratorConnection, email_az: str) ->
         orchestrator_connection: Connection containing process arguments with some accepted AZs
         email_az: A user identification (AZ) read from an email
     '''
-    accepted_az = json.loads(orchestrator_connection.process_arguments)["accepted_azs"]
-    for az in accepted_az:
-        if str.lower(az) == str.lower(email_az):
-            return True
-    return False
+    allowed_azs = json.loads(orchestrator_connection.process_arguments)["accepted_azs"]
+    return email_az.lower() in [az.lower() for az in allowed_azs]
 
 
-def _send_status_email(recipient: str, process_started: bool):
+def _send_status_email(recipient: str, process_started: bool, case_name: str):
     '''Send an email with variable text depending on whether the process started or not.
 
     Args:
         recipient: Who should receive the email
         process_started: Did the process start?
+        case_name: Which case does this concern?
     '''
     subject = config.SUBJECT_BASE
-    text = config.BODY_BASE
+    text = config.BODY_BASE + case_name
     if process_started:
         subject += config.SUBJECT_SUCCESS
         text += config.BODY_SUCCESS
@@ -106,7 +107,7 @@ def _send_status_email(recipient: str, process_started: bool):
         text += config.BODY_ERROR
     smtp_util.send_email(
         receiver= recipient,
-        sender=config.SCREENSHOT_SENDER,
+        sender=config.STATUS_SENDER,
         subject=subject,
         body=text,
         smtp_server=config.SMTP_SERVER,
@@ -122,21 +123,26 @@ def _create_notes_from_queue(orchestrator_connection: OrchestratorConnection, no
         nova_access: A token to write the notes
     '''
     queue_elements_processed = 0
-    while queue_element := orchestrator_connection.get_next_queue_element(config.QUEUE_NAME) and queue_elements_processed < config.MAX_TASK_COUNT:
+    while (queue_element := orchestrator_connection.get_next_queue_element(config.QUEUE_NAME)) and queue_elements_processed < config.MAX_TASK_COUNT:
         # Find a case to add note to
         data_dict = json.loads(queue_element.data)
-        cases = nova_cases.get_cases(nova_access, cpr = queue_element.reference, case_title = data_dict["Sagsoverskrift"])
-        name = _get_name_from_cpr(cases, cpr = queue_element.reference, nova_access = nova_access)
-        case = _find_or_create_matching_case(cases, data_dict, queue_element.reference, name, nova_access)
-        nova_notes.add_text_note(
-            case.uuid,
-            data_dict["Notat overskrift"],
-            data_dict["Notat tekst"],
-            True,
-            nova_access)
-
+        cases = nova_cases.get_cases(nova_access, cpr = queue_element.reference)
+        name = _get_name_from_cpr(cpr = queue_element.reference, nova_access = nova_access)
+        try:
+            case = _find_or_create_matching_case(cases, data_dict, queue_element.reference, name, nova_access)
+            nova_notes.add_text_note(
+                case.uuid,
+                data_dict["Notat overskrift"],
+                data_dict["Notat tekst"],
+                True,
+                nova_access)
+        except LookupError:
+            orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.FAILED, f"Sagsoverskrift '{data_dict["Sagsoverskrift"]}' ikke fundet.")
+        except HTTPError as e:
+            orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.FAILED, json.loads(e.response.text)["title"])
         # Set status Done for this note and look for the next queue element
-        orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
+        else:
+            orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
 
 
 def _get_emails(graph_access: GraphAccess) -> list[Email]:
@@ -168,49 +174,37 @@ def _parse_mail_text(mail_text: str) -> dict:
         A dictionary object, for easier access to variables.
     '''
     dictionary = html_to_dict(mail_text)
-    dictionary["Følsomhed"] = _get_sensitivity_from_email(dictionary["Følsomhed"])
+    if dictionary["Brug eksisterende sag"] != "Valgt":
+        dictionary["Følsomhed"] = _get_sensitivity_from_email(dictionary["Følsomhed"])
+        dictionary["Sikkerhedsenhed"] = _get_securityunit_from_department(dictionary["Afdeling"])
     return dictionary
 
 
 def _get_sensitivity_from_email(email_string: str) -> str:
-    '''Translates the string from OS2 forms to the expected KMD Nova format. This is used only when creating a CaseMail.
+    '''Translates the string from OS2 forms to the expected KMD Nova format.
 
     Args:
         email_string: A string, matching the format in OS2 Forms and the emails sent to the robot.
 
     Returns:
-        A string, matching the format expected by KMD Nova in the sensitivity field.
+        A string, matching the format expected by KMD Nova in the Sensitivity field.
     '''
-    translation = {
-        "Fortrolige oplysninger": "Fortrolige",
-        "Ikke fortrolige oplysninger": "IkkeFortrolige",
-        "Særligt følsomme oplysninger": "SærligFølsomme",
-        "Følsomme oplysninger": "Følsomme"
-    }
-    return translation[email_string]
+    return config.KMD_SENSITIVITY[email_string]
 
 
-def _get_highest_sensitivity(word_one: str, word_two: str) -> str:
-    '''Check two words against their rank in a list, and return the first element found.
+def _get_securityunit_from_department(email_string: str) -> str:
+    '''Translates the string from OS2 Department value to a security unit value
 
     Args:
-        word_one, word_two: Words to check against each other
+        email_string: A string, matching the format in OS2 Forms and the emails sent to the robot.
 
     Returns:
-        The word that occurs first in the tuple below'''
-    check_tuple = (
-        "SærligFølsomme",
-        "Følsomme",
-        "Fortrolige",
-        "IkkeFortrolige"
-    )
-    if check_tuple.index(word_one) < check_tuple.index(word_two):
-        return word_one
-    else:
-        return word_two
+        A string, matching the format expected by KMD Nova in the Security field. All options except two will return Borgerservice.
+    '''
+    return config.KMD_DEPARTMENT_SECURITY_PAIR[email_string]
 
 
-def _get_name_from_cpr(cases: list[NovaCase], cpr: str, nova_access: NovaAccess) -> str:
+def _get_name_from_cpr(cpr: str, nova_access: NovaAccess) -> str:
     '''Find name from a matching case or lookup by address.
 
     Args:
@@ -221,6 +215,7 @@ def _get_name_from_cpr(cases: list[NovaCase], cpr: str, nova_access: NovaAccess)
     Returns:
         The name of the person with the provided CPR.
     '''
+    cases = nova_cases.get_cases(nova_access, cpr = cpr, limit=1)
     # Check provided cases for an existing match with a name:
     for case in cases:
         for case_party in case.case_parties:
@@ -234,15 +229,25 @@ def _create_case(ident: str, name: str, data_dict: dict, nova_access: NovaAccess
     """Create a Nova case based on email data.
 
     Args:
-        ident: The CVR or CPR we are looking for
+        ident: The CPR we are looking for
         name: The name of the person we are looking for
         data_dict: A dictionary object containing the data from the case
         nova_access: An access token for accessing the KMD Nova API
 
     Returns:
         New NovaCase with data defined
+
+    Except:
+        If case creation fails, send an email with the error title.
     """
-    id_type = "CprNummer"
+
+    case_party = CaseParty(
+        role="Primær",
+        identification_type="CprNummer",
+        identification=ident,
+        name=name,
+        uuid=None
+    )
 
     caseworker = Caseworker(
             name='svcitkopeno svcitkopeno',
@@ -250,19 +255,8 @@ def _create_case(ident: str, name: str, data_dict: dict, nova_access: NovaAccess
             uuid='0bacdddd-5c61-4676-9a61-b01a18cec1d5'
         )
 
-    department = Department(
-            id=818485,
-            name=data_dict["Afdeling"],
-            user_key="4BBORGER"
-        )
-
-    case_party = CaseParty(
-        role="Primær",
-        identification_type=id_type,
-        identification=ident,
-        name=name,
-        uuid=None
-    )
+    department = _get_department(data_dict["Afdeling"])
+    security_unit = _get_department(config.KMD_DEPARTMENT_SECURITY_PAIR[data_dict["Afdeling"]])
 
     case = NovaCase(
         uuid=str(uuid.uuid4()),
@@ -275,10 +269,29 @@ def _create_case(ident: str, name: str, data_dict: dict, nova_access: NovaAccess
         sensitivity=data_dict["Følsomhed"],
         caseworker=caseworker,
         responsible_department=department,
-        security_unit=department
+        security_unit=security_unit
     )
+
     nova_cases.add_case(case, nova_access)
     return case
+
+
+def _get_department(department_code: str) -> Department:
+    '''Make a department object from department code
+
+    Args:
+        department_code: A KMD code matching a department
+
+    Returns:
+        A Department object created from data in config
+    '''
+    data = config.KMD_DEPARTMENTS[department_code]
+    department = Department(
+            id=int(data["id"]),
+            name=data["name"],
+            user_key=department_code
+        )
+    return department
 
 
 def _get_ids_from_mail(email: Email, graph_access: GraphAccess) -> list[str]:
@@ -302,7 +315,7 @@ def _get_ids_from_mail(email: Email, graph_access: GraphAccess) -> list[str]:
 
 
 def _find_or_create_matching_case(cases: list[NovaCase], data_dict: dict, ident: str, name: str, nova_access: NovaAccess) -> NovaCase:
-    ''' Lookup case match in list, based on KLE-number and case title.
+    ''' Lookup case match in list, based on case title.
 
     Args:
         cases: A list of cases to check
@@ -311,14 +324,15 @@ def _find_or_create_matching_case(cases: list[NovaCase], data_dict: dict, ident:
         nova_access: An access token to access the KMD Nova API
 
     Returns:
-        A NovaCase which matches the arguments provided.
+        A NovaCase matching the arguments provided.
     '''
-    return_case = _create_case(ident, name, data_dict, nova_access)
-    for case in cases:
-        if case.kle_number == data_dict["KLE-nummer"] and case.title == data_dict["Sagsoverskrift"]:
-            return_case = case
-            return_case.sensitivity = _get_highest_sensitivity(case.sensitivity, data_dict["Følsomhed"])
-    return return_case
+    if data_dict["Brug eksisterende sag"] == "Valgt":
+        for case in cases:
+            if case.title == data_dict["Sagsoverskrift"]:
+                return case
+        raise LookupError("Could not find matching case")
+    else:
+        return _create_case(ident, name, data_dict, nova_access)
 
 
 if __name__ == '__main__':
