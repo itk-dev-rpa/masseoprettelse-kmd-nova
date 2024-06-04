@@ -85,8 +85,8 @@ def _check_az(orchestrator_connection: OrchestratorConnection, email_az: str) ->
         orchestrator_connection: Connection containing process arguments with some accepted AZs
         email_az: A user identification (AZ) read from an email
     '''
-    allowed_azs = json.loads(orchestrator_connection.process_arguments)["accepted_azs"]
-    return email_az.lower() in [az.lower() for az in allowed_azs]
+    accepted_azs = json.loads(orchestrator_connection.process_arguments)["accepted_azs"]
+    return email_az.lower() in [az.lower() for az in accepted_azs]
 
 
 def _send_status_email(recipient: str, process_started: bool, case_name: str):
@@ -236,9 +236,6 @@ def _create_case(ident: str, name: str, data_dict: dict, nova_access: NovaAccess
 
     Returns:
         New NovaCase with data defined
-
-    Except:
-        If case creation fails, send an email with the error title.
     """
 
     case_party = CaseParty(

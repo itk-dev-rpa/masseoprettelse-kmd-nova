@@ -17,7 +17,7 @@ SUBJECT_SUCCESS = "OK"
 SUBJECT_ERROR = "Fejl"
 BODY_BASE = "Robotten 'Masseoprettelse i KMD Nova' for sagen '"
 BODY_SUCCESS = "' er startet."
-BODY_ERROR = "er blevet blokeret. Du ikke har tilladelse til at køre den. Kontakt venligst RPA-teamet."
+BODY_ERROR = "' er blevet blokeret. Du ikke har tilladelse til at køre den. Kontakt venligst RPA-teamet."
 
 # Constant/Credential names
 ERROR_EMAIL = "Error Email"
