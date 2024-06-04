@@ -23,7 +23,7 @@ def send_error_screenshot(to_address: str | list[str], exception: Exception, pro
     # Create message
     msg = EmailMessage()
     msg['to'] = to_address
-    msg['from'] = config.SCREENSHOT_SENDER
+    msg['from'] = config.STATUS_SENDER
     msg['subject'] = f"Error screenshot: {process_name}"
 
     # Take screenshot and convert to base64
