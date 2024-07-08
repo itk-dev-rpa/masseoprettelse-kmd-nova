@@ -56,7 +56,7 @@ def _create_queue_from_emails(orchestrator_connection: OrchestratorConnection, g
         _send_status_email(_get_recipient_from_email(data_dict["Bruger"]), is_user_recognized, data_dict["Sagsoverskrift"])
         # If user is not allowed to send this data, stop the process.
         if not is_user_recognized:
-            break
+            continue
         list_of_ids = _get_ids_from_mail(email, graph_access)
         orchestrator_connection.bulk_create_queue_elements(
             config.QUEUE_NAME,
@@ -130,10 +130,12 @@ def _create_notes_from_queue(orchestrator_connection: OrchestratorConnection, no
         name = _get_name_from_cpr(cpr = queue_element.reference, nova_access = nova_access)
         try:
             case = _find_or_create_matching_case(cases, data_dict, queue_element.reference, name, nova_access)
+            caseworker = _get_process_caseworker()
             nova_notes.add_text_note(
                 case.uuid,
                 data_dict["Notat overskrift"],
                 data_dict["Notat tekst"],
+                caseworker,
                 True,
                 nova_access)
         except LookupError:
@@ -154,11 +156,11 @@ def _get_emails(graph_access: GraphAccess) -> list[Email]:
     Returns:
         A filtered list of email objects to be handled.
     """
-    # Get all emails from the 'Refusioner' folder.
+    # Get all emails from the relevant folder.
     mails = graph_mail.get_emails_from_folder("itk-rpa@mkb.aarhus.dk", config.MAIL_SOURCE_FOLDER, graph_access)
 
     # Filter the emails on sender and subject
-    mails = [mail for mail in mails if mail.sender == "noreply@aarhus.dk" and mail.subject == 'Masseoprettelser i KMD Nova (fra Selvbetjening.aarhuskommune.dk)']
+    mails = [mail for mail in mails if mail.sender == "noreply@aarhus.dk" and mail.subject == config.MAIL_INBOX_SUBJECT]
 
     return mails
 
@@ -246,15 +248,9 @@ def _create_case(ident: str, name: str, data_dict: dict, nova_access: NovaAccess
         uuid=None
     )
 
-    # TODO: Change this caseworker to azrpa75 when it is ready
-    caseworker = Caseworker(
-            name='svcitkopeno svcitkopeno',
-            ident='AZX0080',
-            uuid='0bacdddd-5c61-4676-9a61-b01a18cec1d5'
-        )
-
     department = _get_department(data_dict["Afdeling"])
     security_unit = _get_department(config.KMD_DEPARTMENT_SECURITY_PAIR[data_dict["Afdeling"]])
+    caseworker = _get_process_caseworker()
 
     case = NovaCase(
         uuid=str(uuid.uuid4()),
@@ -331,6 +327,14 @@ def _find_or_create_matching_case(cases: list[NovaCase], data_dict: dict, ident:
         raise LookupError("Could not find matching case")
     else:
         return _create_case(ident, name, data_dict, nova_access)
+
+
+def _get_process_caseworker() -> Caseworker:
+    return Caseworker(
+        name='Rpabruger Rpa75 - MÅ IKKE SLETTES RITM0283472',
+        ident='azrpa75',
+        uuid='2382680f-58cd-4f6d-90fd-23e4ce0180ae'
+    )
 
 
 if __name__ == '__main__':

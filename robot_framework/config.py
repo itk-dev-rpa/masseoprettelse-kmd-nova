@@ -26,6 +26,7 @@ GRAPH_API = "Graph API"
 
 # Other
 MAIL_SOURCE_FOLDER = "Indbakke/Masseoprettelse KMD Nova"
+MAIL_INBOX_SUBJECT = "RPA - Masseoprettelse i KMD Nova (fra Selvbetjening.aarhuskommune.dk)"
 
 # Queue specific configs
 # ----------------------
