@@ -139,7 +139,7 @@ def _create_notes_from_queue(orchestrator_connection: OrchestratorConnection, no
                 True,
                 nova_access)
         except LookupError:
-            orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.FAILED, f"Sagsoverskrift '{data_dict["Sagsoverskrift"]}' ikke fundet.")
+            orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.FAILED, f"Sagsoverskrift '{data_dict['Sagsoverskrift']}' ikke fundet.")
         except HTTPError as e:
             orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.FAILED, json.loads(e.response.text)["title"])
         # Set status Done for this note and look for the next queue element
