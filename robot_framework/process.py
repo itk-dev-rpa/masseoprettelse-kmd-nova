@@ -325,8 +325,7 @@ def _find_or_create_matching_case(cases: list[NovaCase], data_dict: dict, ident:
             if case.title == data_dict["Sagsoverskrift"]:
                 return case
         raise LookupError("Could not find matching case")
-    else:
-        return _create_case(ident, name, data_dict, nova_access)
+    return _create_case(ident, name, data_dict, nova_access)
 
 
 def _get_process_caseworker() -> Caseworker:
