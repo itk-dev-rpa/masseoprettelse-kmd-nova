@@ -65,6 +65,7 @@ def _get_name_from_cpr(cpr: str, nova_access: NovaAccess, cases: list(NovaCase))
         for case_party in case.case_parties:
             if case_party.identification == cpr and case_party.name:
                 return case_party.name
+    return "No Name"
 
 
 def _create_case(ident: str, name: str, data_dict: dict, nova_access: NovaAccess) -> NovaCase:
