@@ -24,9 +24,9 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
     queue_elements_processed = 0
     while (queue_element := orchestrator_connection.get_next_queue_element(config.QUEUE_NAME)) and queue_elements_processed < config.MAX_TASK_COUNT:
         data_dict = json.loads(queue_element.data)
-        name = _get_name_from_cpr(cpr = queue_element.reference, nova_access=nova_access)
+        cases = nova_cases.get_cases(nova_access, cpr = queue_element.reference)
+        name = _get_name_from_cpr(cpr = queue_element.reference, nova_access=nova_access, cases=cases)
         try:
-            cases = nova_cases.get_cases(nova_access, cpr = queue_element.reference)
             case = (_find_matching_case(data_dict["Sagsoverskrift"], cases)
                     if data_dict["Brug eksisterende sag"] == "Valgt"
                     else _create_case(queue_element.reference, name, data_dict, nova_access))
@@ -48,8 +48,8 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
             orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
 
 
-def _get_name_from_cpr(cpr: str, nova_access: NovaAccess) -> str:
-    """Find name from lookup by address.
+def _get_name_from_cpr(cpr: str, nova_access: NovaAccess, cases: list(NovaCase)) -> str:
+    """Find name from lookup by address, and if not found (such as when using test CPRs) do a lookup in cases.
 
     Args:
         cpr: ÍD of the person we are looking for.
@@ -58,7 +58,13 @@ def _get_name_from_cpr(cpr: str, nova_access: NovaAccess) -> str:
     Returns:
         The name of the person with the provided CPR.
     """
-    return nova_cpr.get_address_by_cpr(cpr, nova_access)['name']
+    address = nova_cpr.get_address_by_cpr(cpr, nova_access)
+    if address:
+        return address['name']
+    for case in cases:
+        for case_party in case.case_parties:
+            if case_party.identification == cpr and case_party.name:
+                return case_party.name
 
 
 def _create_case(ident: str, name: str, data_dict: dict, nova_access: NovaAccess) -> NovaCase:
