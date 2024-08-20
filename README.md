@@ -7,7 +7,7 @@ Install the robot in Open Orchestrator, with a list of accepted AZ idents for pe
 
 ```json
 {
-    "accepted_azs" : ["az77820","az68933"]
+    "accepted_azs" : ["az00000", "az000001"]
 }
 ```
 Setup email and link to Open Orchestrator queue in config.py and setup Nova access in Open Orchestrator credentials.

@@ -9,6 +9,7 @@ FAIL_ROBOT_ON_TOO_MANY_ERRORS = True
 # Process report email
 SMTP_SERVER = "smtp.aarhuskommune.local"
 SMTP_PORT = 25
+SCREENSHOT_SENDER = "robot@friend.dk"
 STATUS_SENDER = "itk-rpa@mkb.aarhus.dk"
 
 # Email texts
