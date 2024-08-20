@@ -1,4 +1,5 @@
 """This module contains configuration constants used across the framework"""
+from itk_dev_shared_components.kmd_nova.nova_objects import Caseworker
 
 # The number of times the robot retries on an error before terminating.
 MAX_RETRY_COUNT = 3
@@ -64,3 +65,9 @@ KMD_SENSITIVITY = {
         "Særligt følsomme oplysninger": "SærligFølsomme",
         "Følsomme oplysninger": "Følsomme"
 }
+
+CASEWORKER = Caseworker(
+        name='Rpabruger Rpa75 - MÅ IKKE SLETTES RITM0283472',
+        ident='azrpa75',
+        uuid='2382680f-58cd-4f6d-90fd-23e4ce0180ae'
+    )

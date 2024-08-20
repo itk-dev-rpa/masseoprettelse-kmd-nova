@@ -7,7 +7,7 @@ from OpenOrchestrator.orchestrator_connection.connection import OrchestratorConn
 from OpenOrchestrator.database.queues import QueueStatus
 from itk_dev_shared_components.kmd_nova import nova_notes, nova_cases
 from itk_dev_shared_components.kmd_nova.authentication import NovaAccess
-from itk_dev_shared_components.kmd_nova.nova_objects import NovaCase, CaseParty, Caseworker, Department
+from itk_dev_shared_components.kmd_nova.nova_objects import NovaCase, CaseParty, Department
 from itk_dev_shared_components.kmd_nova import cpr as nova_cpr
 from requests.exceptions import HTTPError
 
@@ -31,7 +31,7 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
                     if data_dict["Brug eksisterende sag"] == "Valgt"
                     else _create_case(queue_element.reference, name, data_dict, nova_access))
 
-            caseworker = _get_process_caseworker()
+            caseworker = config.CASEWORKER
             nova_notes.add_text_note(
                 case.uuid,
                 data_dict["Notat overskrift"],
@@ -84,7 +84,7 @@ def _create_case(ident: str, name: str, data_dict: dict, nova_access: NovaAccess
 
     department = _get_department(data_dict["Afdeling"])
     security_unit = _get_department(config.KMD_DEPARTMENT_SECURITY_PAIR[data_dict["Afdeling"]])
-    caseworker = _get_process_caseworker()
+    caseworker = config.CASEWORKER
 
     case = NovaCase(
         uuid=str(uuid.uuid4()),
@@ -138,11 +138,3 @@ def _find_matching_case(case_title: str, cases: list[NovaCase]) -> NovaCase:
         if case.title == case_title:
             return case
     raise LookupError("Could not find matching case")
-
-
-def _get_process_caseworker() -> Caseworker:
-    return Caseworker(
-        name='Rpabruger Rpa75 - MÅ IKKE SLETTES RITM0283472',
-        ident='azrpa75',
-        uuid='2382680f-58cd-4f6d-90fd-23e4ce0180ae'
-    )
