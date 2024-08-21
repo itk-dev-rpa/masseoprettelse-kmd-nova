@@ -28,8 +28,9 @@ def create_queue_from_emails(orchestrator_connection: OrchestratorConnection, gr
         # Get data from email
         data_dict = _parse_mail_text(email.body)
         user_az = _get_az_from_email(data_dict["Bruger"])
+        user_email = _get_recipient_from_email(data_dict["Bruger"])
         is_user_recognized = _check_az(orchestrator_connection, user_az)
-        _send_status_email(_get_recipient_from_email(data_dict["Bruger"]), is_user_recognized, data_dict["Sagsoverskrift"])
+        _send_status_email(user_email, is_user_recognized, data_dict["Sagsoverskrift"])
         # If user is not allowed to send this data, stop the process.
         if not is_user_recognized:
             continue
@@ -69,18 +70,19 @@ def _send_status_email(recipient: str, process_started: bool, case_name: str):
     """Send an email with variable text depending on whether the process started or not.
 
     Args:
-        recipient: Who should receive the email
-        process_started: Did the process start?
-        case_name: Which case does this concern?
+        recipient: Who should receive the email.
+        process_started: Checked to determine what text to add to the email.
+        case_name: The case name to include in the subject of the mail.
     """
     subject = "Robotstatus for Masseoprettelse i KMD Nova: "
     text = "Robotten 'Masseoprettelse i KMD Nova' for sagen '" + case_name
     if process_started:
-        subject += "OK"
-        text += "' er startet."
+        subject += "STARTET"
+        text += "' er startet og notater vil nu blive tilført de ønskede sagsnumre. Når robotten er færdig vil den sende en besked til sagsbehandleren, som startede robotten."
     else:
-        subject += "FEJL"
-        text += "' er blevet blokeret. Du ikke har tilladelse til at køre den. Kontakt venligst RPA-teamet ved at svare på denne mail."
+        subject += "BLOKERET"
+        text += "' er blevet blokeret. Sagsbehandleren som aktiverede robotten har ikke fået tilladelse til at starte robotten. Kontakt venligst RPA-teamet ved at svare på denne mail, hvis I har brug for at tilføje nye brugere."
+    text += "\n\nMvh. ITK RPA"
     smtp_util.send_email(
         receiver= recipient,
         sender=config.STATUS_SENDER,

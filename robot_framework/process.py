@@ -28,5 +28,5 @@ if __name__ == '__main__':
     conn_string = os.getenv("OpenOrchestratorConnString")
     crypto_key = os.getenv("OpenOrchestratorKey")
     az = input("Please enter the AZ used in OS2 Forms:\n")
-    oc = OrchestratorConnection("Masseoprettelse KMD NOVA", conn_string, crypto_key, f'{{"accepted_azs":[{az}]}}')
+    oc = OrchestratorConnection("Masseoprettelse KMD NOVA", conn_string, crypto_key, f'{{"accepted_azs":["{az}"]}}')
     process(oc)
