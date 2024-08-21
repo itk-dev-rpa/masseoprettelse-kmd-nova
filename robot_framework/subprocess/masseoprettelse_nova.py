@@ -48,7 +48,7 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
             orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
 
 
-def _get_name_from_cpr(cpr: str, nova_access: NovaAccess, cases: list(NovaCase)) -> str:
+def _get_name_from_cpr(cpr: str, nova_access: NovaAccess, cases: list[NovaCase]) -> str:
     """Find name from lookup by address, and if not found (such as when using test CPRs) do a lookup in cases.
 
     Args:
