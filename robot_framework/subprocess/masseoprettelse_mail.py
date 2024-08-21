@@ -73,14 +73,14 @@ def _send_status_email(recipient: str, process_started: bool, case_name: str):
         process_started: Did the process start?
         case_name: Which case does this concern?
     """
-    subject = config.SUBJECT_BASE
-    text = config.BODY_BASE + case_name
+    subject = "Robotstatus for Masseoprettelse i KMD Nova: "
+    text = "Robotten 'Masseoprettelse i KMD Nova' for sagen '" + case_name
     if process_started:
-        subject += config.SUBJECT_SUCCESS
-        text += config.BODY_SUCCESS
+        subject += "OK"
+        text += "' er startet."
     else:
-        subject += config.SUBJECT_ERROR
-        text += config.BODY_ERROR
+        subject += "FEJL"
+        text += "' er blevet blokeret. Du ikke har tilladelse til at køre den. Kontakt venligst RPA-teamet ved at svare på denne mail."
     smtp_util.send_email(
         receiver= recipient,
         sender=config.STATUS_SENDER,
