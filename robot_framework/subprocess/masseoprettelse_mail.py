@@ -78,7 +78,7 @@ def _send_status_email(recipient: str, process_started: bool, case_name: str):
     text = "Robotten 'Masseoprettelse i KMD Nova' for sagen '" + case_name
     if process_started:
         subject += "STARTET"
-        text += "' er startet og notater vil nu blive tilført de ønskede sagsnumre. Når robotten er færdig vil den sende en besked til sagsbehandleren, som startede robotten."
+        text += "' er startet og notater vil nu blive tilført de ønskede sagsnumre."
     else:
         subject += "BLOKERET"
         text += "' er blevet blokeret. Sagsbehandleren som aktiverede robotten har ikke fået tilladelse til at starte robotten. Kontakt venligst RPA-teamet ved at svare på denne mail, hvis I har brug for at tilføje nye brugere."
