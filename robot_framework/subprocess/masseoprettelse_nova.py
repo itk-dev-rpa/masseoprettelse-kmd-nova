@@ -14,18 +14,18 @@ from requests.exceptions import HTTPError
 from robot_framework import config
 
 
-def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nova_access: NovaAccess):
+def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nova_access: NovaAccess, queue_element_count: tuple[int]):
     """ Load queue elements and write notes to KMD Nova
 
     Args:
         orchestrator_connection: A way to read the queue elements
         nova_access: A token to write the notes
     """
-    queue_elements_processed = 0
-    while (queue_element := orchestrator_connection.get_next_queue_element(config.QUEUE_NAME)) and queue_elements_processed < config.MAX_TASK_COUNT:
+    while (queue_element := orchestrator_connection.get_next_queue_element(config.QUEUE_NAME)) and queue_element_count[0] < config.MAX_TASK_COUNT:
         data_dict = json.loads(queue_element.data)
         cases = nova_cases.get_cases(nova_access, cpr = queue_element.reference)
         name = _get_name_from_cpr(cpr = queue_element.reference, nova_access=nova_access, cases=cases)
+        queue_element_count[0] += 1
         try:
             case = (_find_matching_case(data_dict["Sagsoverskrift"], cases)
                     if data_dict["Brug eksisterende sag"] == "Valgt"

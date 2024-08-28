@@ -12,3 +12,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Fixed
+
+[unreleased]: https://github.com/itk-dev-rpa/masseoprettelse-kmd-nova/compare/develop...feature/first_edition

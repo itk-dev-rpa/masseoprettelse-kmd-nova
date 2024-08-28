@@ -22,11 +22,12 @@ def main():
     orchestrator_connection.log_trace("Robot Framework started.")
     initialize.initialize(orchestrator_connection)
 
+    queue_element_count = [0]  # A count of queue elements to keep the robot from running for too long, in a tuple to make it mutable
     error_count = 0
     for _ in range(config.MAX_RETRY_COUNT):
         try:
             reset.reset(orchestrator_connection)
-            process.process(orchestrator_connection)
+            process.process(orchestrator_connection, queue_element_count)
             break
 
         # If any business rules are broken the robot should stop entirely.
