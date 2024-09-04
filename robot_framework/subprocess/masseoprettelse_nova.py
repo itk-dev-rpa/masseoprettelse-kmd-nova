@@ -50,7 +50,7 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
                 nova_access)
         except HTTPError as e:
             orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.FAILED, json.loads(e.response.text)["title"])
-            continue
+            raise e
 
         orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
 
@@ -74,7 +74,7 @@ def _get_name_from_cpr(cpr: str, nova_access: NovaAccess, cases: list[NovaCase])
             if case_party.identification == cpr and case_party.name:
                 return case_party.name
 
-    raise RuntimeError(f"No name was found for {cpr}")
+    raise LookupError(f"No name was found for {cpr}")
 
 
 def _create_case(ident: str, name: str, data_dict: dict, nova_access: NovaAccess) -> NovaCase:
