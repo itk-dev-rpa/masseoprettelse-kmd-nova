@@ -22,30 +22,33 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
         nova_access: A token to write the notes
     """
     while (queue_element := orchestrator_connection.get_next_queue_element(config.QUEUE_NAME)) and queue_element_count[0] < config.MAX_TASK_COUNT:
+        queue_element_count[0] += 1
         data_dict = json.loads(queue_element.data)
         cases = nova_cases.get_cases(nova_access, cpr = queue_element.reference)
-        name = _get_name_from_cpr(cpr = queue_element.reference, nova_access=nova_access, cases=cases)
-        queue_element_count[0] += 1
-        try:
-            case = (_find_matching_case(data_dict["Sagsoverskrift"], cases)
-                    if data_dict["Brug eksisterende sag"] == "Valgt"
-                    else _create_case(queue_element.reference, name, data_dict, nova_access))
 
-            caseworker = config.CASEWORKER
+        if data_dict["Brug eksisterende sag"] == "Valgt":
+            try:
+                case = _find_matching_case(data_dict["Sagsoverskrift"], cases)
+            except LookupError:
+                orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.FAILED, f"Sagsoverskrift '{data_dict['Sagsoverskrift']}' ikke fundet.")
+                continue
+        else:
+            name = _get_name_from_cpr(cpr = queue_element.reference, nova_access=nova_access, cases=cases)
+            case = _create_case(queue_element.reference, name, data_dict, nova_access)
+
+        try:
             nova_notes.add_text_note(
                 case.uuid,
                 data_dict["Notat overskrift"],
                 data_dict["Notat tekst"],
-                caseworker,
+                config.CASEWORKER,
                 True,
                 nova_access)
-        except LookupError:
-            orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.FAILED, f"Sagsoverskrift '{data_dict['Sagsoverskrift']}' ikke fundet.")
         except HTTPError as e:
             orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.FAILED, json.loads(e.response.text)["title"])
-        # Set status Done for this note and look for the next queue element
-        else:
-            orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
+            continue
+
+        orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.DONE)
 
 
 def _get_name_from_cpr(cpr: str, nova_access: NovaAccess, cases: list[NovaCase]) -> str:
@@ -61,11 +64,13 @@ def _get_name_from_cpr(cpr: str, nova_access: NovaAccess, cases: list[NovaCase])
     address = nova_cpr.get_address_by_cpr(cpr, nova_access)
     if address:
         return address['name']
+
     for case in cases:
         for case_party in case.case_parties:
             if case_party.identification == cpr and case_party.name:
                 return case_party.name
-    return "No Name"
+
+    raise RuntimeError(f"No name was found for {cpr}")
 
 
 def _create_case(ident: str, name: str, data_dict: dict, nova_access: NovaAccess) -> NovaCase:

@@ -30,16 +30,15 @@ def create_queue_from_emails(orchestrator_connection: OrchestratorConnection, gr
         user_az = _get_az_from_email(data_dict["Bruger"])
         user_email = _get_recipient_from_email(data_dict["Bruger"])
         is_user_recognized = _check_az(orchestrator_connection, user_az)
-        _send_status_email(user_email, is_user_recognized, data_dict["Sagsoverskrift"])
         # If user is not allowed to send this data, stop the process.
-        if not is_user_recognized:
-            continue
-        list_of_ids = _get_ids_from_mail(email, graph_access)
-        orchestrator_connection.bulk_create_queue_elements(
-            config.QUEUE_NAME,
-            references = list_of_ids,
-            data=[json.dumps(data_dict, ensure_ascii=False)] * len(list_of_ids),
-            created_by="Robot")
+        if is_user_recognized:
+            list_of_ids = _get_ids_from_mail(email, graph_access)
+            orchestrator_connection.bulk_create_queue_elements(
+                config.QUEUE_NAME,
+                references = list_of_ids,
+                data=[json.dumps(data_dict, ensure_ascii=False)] * len(list_of_ids),
+                created_by="Robot")
+        _send_status_email(user_email, is_user_recognized, data_dict["Sagsoverskrift"])
         graph_mail.delete_email(email, graph_access)
 
 
