@@ -21,7 +21,7 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
         orchestrator_connection: A way to read the queue elements
         nova_access: A token to write the notes
     """
-    while (queue_element := orchestrator_connection.get_next_queue_element(config.QUEUE_NAME)) and queue_element_count[0] < config.MAX_TASK_COUNT:
+    while (queue_element_count[0] < config.MAX_TASK_COUNT and queue_element := orchestrator_connection.get_next_queue_element(config.QUEUE_NAME)):
         data_dict = json.loads(queue_element.data)
         cases = nova_cases.get_cases(nova_access, cpr = queue_element.reference)
         name = _get_name_from_cpr(cpr = queue_element.reference, nova_access=nova_access, cases=cases)
