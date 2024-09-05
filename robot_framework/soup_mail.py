@@ -10,23 +10,17 @@ def html_to_dict(html_content) -> dict:
     '''
     # Parse the HTML content
     soup = BeautifulSoup(html_content, 'html.parser')
-    bold_tags = soup.find_all('b')
-    email_dict = {}
 
-    for bold_tag in bold_tags:
-        # Get the headline text
-        headline = bold_tag.get_text(strip=True)
+    result = {}
+    for p in soup.find_all('p'):
+        parts = p.get_text(separator='|').split('|')
+        if len(parts) == 2:
+            key, value = parts
+            result[key.strip()] = value.strip()
 
-        # Find the next sibling that is not a tag (usually the text part)
-        next_sibling = bold_tag.next_sibling
-        values = []
+    email_tag = soup.find('a', href=True, text='kriba@aarhus.dk')
+    email = email_tag.get_text()
+    az_ident = email_tag.find_next_sibling(text=True).strip().split(': ')[1]
+    result['Bruger'] = f"E-mail: {email}, AZ-ident: {az_ident}"
 
-        while next_sibling and next_sibling not in bold_tags:
-            if isinstance(next_sibling, str):
-                values.append(next_sibling.strip())
-
-            next_sibling = next_sibling.next_sibling
-
-        email_dict[headline] = "\n".join(values)
-
-    return email_dict
+    return result
