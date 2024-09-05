@@ -18,9 +18,10 @@ def html_to_dict(html_content) -> dict:
             key, value = parts
             result[key.strip()] = value.strip()
 
-    email_tag = soup.find('a', href=True, text='kriba@aarhus.dk')
-    email = email_tag.get_text()
-    az_ident = email_tag.find_next_sibling(text=True).strip().split(': ')[1]
-    result['Bruger'] = f"E-mail: {email}, AZ-ident: {az_ident}"
+    email_tag = soup.find('a', href=True, text=lambda text: text and '@' in text)
+    if email_tag:
+        email = email_tag.get_text()
+        az_ident = email_tag.find_next_sibling(text=True).strip().split(': ')[1]
+        result['Bruger'] = f"E-mail: {email}, AZ-ident: {az_ident}"
 
     return result
