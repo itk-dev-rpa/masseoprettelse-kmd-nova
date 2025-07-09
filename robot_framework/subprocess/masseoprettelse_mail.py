@@ -1,10 +1,10 @@
 """This subprocess concerns mail functionality of the robot."""
 import json
 import re
-import pyodbc
 import uuid
 from datetime import datetime
 
+import pyodbc
 from OpenOrchestrator.orchestrator_connection.connection import OrchestratorConnection
 from itk_dev_shared_components.graph.authentication import GraphAccess
 from itk_dev_shared_components.graph import mail as graph_mail
