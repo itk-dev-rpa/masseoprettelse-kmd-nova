@@ -63,3 +63,5 @@ CASEWORKER = Caseworker(
         ident='azrpa75',
         uuid='2382680f-58cd-4f6d-90fd-23e4ce0180ae'
     )
+
+DATA_BUCKETS = "Data Buckets"

@@ -1,6 +1,9 @@
 """This subprocess concerns mail functionality of the robot."""
 import json
 import re
+import pyodbc
+import uuid
+from datetime import datetime
 
 from OpenOrchestrator.orchestrator_connection.connection import OrchestratorConnection
 from itk_dev_shared_components.graph.authentication import GraphAccess
@@ -32,6 +35,16 @@ def create_queue_from_emails(orchestrator_connection: OrchestratorConnection, gr
         is_user_recognized = _check_az(orchestrator_connection, user_az)
         # If user is not allowed to send this data, stop the process.
         if is_user_recognized:
+            data_bucket_conn_string = orchestrator_connection.get_constant(config.DATA_BUCKETS).value
+            data_bucket_connection = pyodbc.connect(data_bucket_conn_string)
+            bucket_id = uuid.uuid4()
+
+            text = data_dict['Notat tekst']
+            data_dict['Notat tekst'] = str(bucket_id)
+            data_bucket_connection.execute("INSERT INTO DataBuckets VALUES (?, ?, ?, ?)", bucket_id, text, orchestrator_connection.process_name, datetime.now())
+            data_bucket_connection.commit()
+            orchestrator_connection.log_info(f"Data inserted into bucket: {bucket_id}")
+
             list_of_ids = _get_ids_from_mail(email, graph_access)
             orchestrator_connection.bulk_create_queue_elements(
                 config.QUEUE_NAME,
@@ -44,7 +57,7 @@ def create_queue_from_emails(orchestrator_connection: OrchestratorConnection, gr
 
 def _get_az_from_email(user_data: str) -> str:
     """Find az in user_data using regex"""
-    pattern = r"\baz\d+\b"
+    pattern = r"\baz[\da-z]+\b"
     return re.findall(pattern, user_data)[0]
 
 
