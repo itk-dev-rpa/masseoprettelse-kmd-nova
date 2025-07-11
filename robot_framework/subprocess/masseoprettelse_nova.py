@@ -2,6 +2,7 @@
 from datetime import datetime
 import json
 import uuid
+import pyodbc
 
 from OpenOrchestrator.orchestrator_connection.connection import OrchestratorConnection
 from OpenOrchestrator.database.queues import QueueStatus
@@ -41,10 +42,13 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
             case = _create_case(queue_element.reference, name, data_dict, nova_access)
 
         try:
+            data_bucket_conn_string = orchestrator_connection.get_constant(config.DATA_BUCKETS).value
+            text = _get_bucket_data(data_dict["Notat tekst"], data_bucket_conn_string)
+
             nova_notes.add_text_note(
                 case.uuid,
                 data_dict["Notat overskrift"],
-                data_dict["Notat tekst"],
+                text,
                 config.CASEWORKER,
                 True,
                 nova_access)
@@ -154,3 +158,19 @@ def _find_matching_case(case_title: str, cases: list[NovaCase]) -> NovaCase:
         if case.title == case_title:
             return case
     raise LookupError("Could not find matching case")
+
+
+def _get_bucket_data(key: str, data_bucket_conn_string: str) -> str:
+    """Get data from the data buckets with the given key.
+
+    Args:
+        key: The key of the value in the data bucket.
+        data_bucket_conn_string: The connection string to the database.
+
+    Returns:
+        The value of the data bucket with the given key.
+    """
+    if (key.find(" ")) > 0:
+        return key
+    data_bucket_connection = pyodbc.connect(data_bucket_conn_string)
+    return data_bucket_connection.execute("SELECT value FROM DataBuckets WHERE [key] = ?", key).fetchval()

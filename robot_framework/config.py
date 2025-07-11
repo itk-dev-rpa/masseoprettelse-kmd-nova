@@ -29,7 +29,7 @@ MAIL_INBOX_SUBJECT = "RPA - Masseoprettelse i KMD Nova (fra Selvbetjening.aarhus
 QUEUE_NAME = "Masseoprettelse i KMD Nova"
 
 # The limit on how many queue elements to process
-MAX_TASK_COUNT = 100
+MAX_TASK_COUNT = 1000
 
 # ----------------------
 # KMD Dictionaries
@@ -63,3 +63,5 @@ CASEWORKER = Caseworker(
         ident='azrpa75',
         uuid='2382680f-58cd-4f6d-90fd-23e4ce0180ae'
     )
+
+DATA_BUCKETS = "Data Buckets"

@@ -1,6 +1,8 @@
 # Masseoprettelse i KMD Nova
 An Open Orchestrator RPA solution for reading emails sent from OS2 Forms and outputting notes in KMD Nova.
 
+The robot will read the emails from the inbox, create queue elements and then run through each queue element and create notes in Nova.
+
 ## Quick start
 
 Install the robot in Open Orchestrator, with a list of accepted AZ idents for people who should be allowed to input data from OS2 Forms:
@@ -13,11 +15,9 @@ Install the robot in Open Orchestrator, with a list of accepted AZ idents for pe
 
 Setup email and link to Open Orchestrator queue in config.py and setup Nova access in Open Orchestrator credentials.
 
-When the robot is run from OpenOrchestrator the `main.py` file is run which results
-in the following:
-1. The working directory is changed to where `main.py` is located.
-2. A virtual environment is automatically setup with the required packages.
-3. The framework is called passing on all arguments needed by [OpenOrchestrator](https://github.com/itk-dev-rpa/OpenOrchestrator).
+## Known errors
+
+If a non-CPR is found in input (such as a line with headers), the robot will fail.
 
 ## Requirements
 Minimum python version 3.10
