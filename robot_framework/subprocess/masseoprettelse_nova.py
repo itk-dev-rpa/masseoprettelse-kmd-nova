@@ -28,7 +28,6 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
             return
 
         queue_element_count[0] += 1
-        print(f"Working on element {queue_element_count[0]}")
         data_dict = json.loads(queue_element.data)
         cases = nova_cases.get_cases(nova_access, cpr = queue_element.reference)
 
