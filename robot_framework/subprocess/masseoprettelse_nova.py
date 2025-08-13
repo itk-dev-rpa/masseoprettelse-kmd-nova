@@ -52,6 +52,10 @@ def create_notes_from_queue(orchestrator_connection: OrchestratorConnection, nov
                 config.CASEWORKER,
                 True,
                 nova_access)
+
+            if data_dict["Brug eksisterende sag"] == "Ikke valgt" and data_dict["Afslut sag"] == "Valgt":
+                nova_cases.set_case_state(case.uuid, "Afsluttet", nova_access)
+
         except HTTPError as e:
             orchestrator_connection.set_queue_element_status(queue_element.id, QueueStatus.FAILED, json.loads(e.response.text)["title"])
             raise e
