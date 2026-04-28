@@ -22,11 +22,3 @@ def process(orchestrator_connection: OrchestratorConnection, queue_element_count
     nova_credentials = orchestrator_connection.get_credential(config.NOVA_API)
     nova_access = NovaAccess(nova_credentials.username, nova_credentials.password)
     masseoprettelse_nova.create_notes_from_queue(orchestrator_connection, nova_access, queue_element_count)
-
-
-if __name__ == '__main__':
-    conn_string = os.getenv("OpenOrchestratorConnString")
-    crypto_key = os.getenv("OpenOrchestratorKey")
-    az = input("Please enter the AZ used in OS2 Forms:\n")
-    oc = OrchestratorConnection("Masseoprettelse KMD NOVA", conn_string, crypto_key, f'{{"accepted_azs":["{az}"]}}', "", "")
-    process(oc, [0])
