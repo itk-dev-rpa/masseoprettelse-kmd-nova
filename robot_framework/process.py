@@ -1,7 +1,6 @@
 """This module contains the main process of the robot."""
 
 import json
-import os
 
 from OpenOrchestrator.orchestrator_connection.connection import OrchestratorConnection
 from itk_dev_shared_components.graph import authentication as graph_authentication
